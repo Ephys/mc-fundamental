@@ -5,6 +5,7 @@
   "refmap": "fundamental.mixins.refmap.json",
   "package": "be.ephys.fundamental.mixins",
   "mixins": [
+    "AbstractTreeGrowerMixin",
     "BannerDuplicateRecipeMixin",
     "CactusBlockMixin",
     "CompassItemMixin",
