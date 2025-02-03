@@ -1,5 +1,6 @@
 package be.ephys.fundamental.biome_trees;
 
+import be.ephys.cookiecore.config.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
@@ -17,25 +18,27 @@ import net.minecraft.world.level.levelgen.feature.WeightedPlacedFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.RandomFeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.TreeConfiguration;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraftforge.common.ForgeConfigSpec;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 public class BiomeTreeModule {
+  @Config(name = "saplings_grow_biome_trees", description = "Makes saplings grow into the same trees that generate in the biome during world generation.")
+  @Config.BooleanDefault(true)
+  public static ForgeConfigSpec.BooleanValue enabled;
+
   private static final Random RANDOM = new Random();
 
   public static boolean spawnBiomeTree(ServerLevel world, ChunkGenerator chunkGenerator, BlockPos pos, BlockState saplingState, Random random, ConfiguredFeature<?, ?> expectedTreeTypeCf) {
-    Biome biome = world.getBiome(pos).value();
-    BiomeGenerationSettings biomeGenSettings = biome.getGenerationSettings();
-    HolderSet<PlacedFeature> vegetalFeatures = biomeGenSettings.features().get(GenerationStep.Decoration.VEGETAL_DECORATION.ordinal());
-
-    List<WeightedConfiguredFeature> weightedTreeFeatures = new ArrayList<>();
-    List<ConfiguredFeature<?, ?>> defaultTreeFeatures = new ArrayList<>();
-    for (Holder<PlacedFeature> featureHolder : vegetalFeatures) {
-      PlacedFeature feature = featureHolder.value();
-      collectTreeFeatures(feature, weightedTreeFeatures, defaultTreeFeatures);
+    if (!enabled.get()) {
+      return false;
     }
+
+    Biome biome = world.getBiome(pos).value();
+    BiomeTreeFeatures biomeTreeFeatures = collectTreeFeaturesForBiomeCached(biome);
+
+    List<WeightedConfiguredFeature> weightedTreeFeatures = biomeTreeFeatures.weightedTreeFeatures;
+    List<ConfiguredFeature<?, ?>> defaultTreeFeatures = biomeTreeFeatures.defaultTreeFeatures;
 
     if (weightedTreeFeatures.isEmpty() && defaultTreeFeatures.isEmpty()) {
       return false;
@@ -133,7 +136,26 @@ public class BiomeTreeModule {
     }
   }
 
-  // TODO: cache output
+  private static final Map<Biome, BiomeTreeFeatures> biomeTreeFeaturesCache = new HashMap<>();
+
+  private static BiomeTreeFeatures collectTreeFeaturesForBiomeCached(Biome biome) {
+    return biomeTreeFeaturesCache.computeIfAbsent(biome, BiomeTreeModule::collectTreeFeaturesForBiome);
+  }
+
+  private static BiomeTreeFeatures collectTreeFeaturesForBiome(Biome biome) {
+    BiomeGenerationSettings biomeGenSettings = biome.getGenerationSettings();
+    HolderSet<PlacedFeature> vegetalFeatures = biomeGenSettings.features().get(GenerationStep.Decoration.VEGETAL_DECORATION.ordinal());
+
+    List<WeightedConfiguredFeature> weightedTreeFeatures = new ArrayList<>();
+    List<ConfiguredFeature<?, ?>> defaultTreeFeatures = new ArrayList<>();
+    for (Holder<PlacedFeature> featureHolder : vegetalFeatures) {
+      PlacedFeature feature = featureHolder.value();
+      collectTreeFeatures(feature, weightedTreeFeatures, defaultTreeFeatures);
+    }
+
+    return new BiomeTreeFeatures(weightedTreeFeatures, defaultTreeFeatures);
+  }
+
   private static void collectTreeFeatures(PlacedFeature placedFeature, List<WeightedConfiguredFeature> weightedFeatures, List<ConfiguredFeature<?, ?>> defaultFeatures) {
     collectTreeFeatures(placedFeature, weightedFeatures, defaultFeatures, 1);
   }
@@ -146,6 +168,6 @@ public class BiomeTreeModule {
     return null;
   }
 
-  private record WeightedConfiguredFeature(ConfiguredFeature<?, ?> configuredFeature, float chance) {
-  }
+  private record BiomeTreeFeatures(List<WeightedConfiguredFeature> weightedTreeFeatures, List<ConfiguredFeature<?, ?>> defaultTreeFeatures) {}
+  private record WeightedConfiguredFeature(ConfiguredFeature<?, ?> configuredFeature, float chance) {}
 }
